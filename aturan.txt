@@ -1,0 +1,11 @@
+beberapa aturan yang harus anda patuhi:
+1.jangan pakai platform io style, pakai arduino IDE style
+2.jangan pakai library yang tidak ada di arduino IDE
+3.setiap codee yang anda buat akan di copy paste ke Arduino IDE, jadi pastikan code yang anda buat sudah benar dan tidak ada error
+4. TULIS KODE SECARA PROSEDURAL, BUKAN OOP RUMIT: Gunakan gaya penulisan prosedural standar Arduino (fungsi-fungsi terpisah) daripada membuat Custom Class/Object yang kompleks, kecuali benar-benar diperlukan. Fokus pada pendekatan "how to implement/use" yang mudah dibaca.
+5. DEKLARASI PIN DI AWAL: Selalu gunakan `#define` atau `const int` di bagian paling atas untuk semua pin komponen. Jangan pernah menggunakan angka pin langsung (hardcode) di dalam fungsi seperti pinMode atau digitalWrite.
+6. SEBUTKAN NAMA LIBRARY SPESIFIK: Jika menggunakan library, gunakan yang standar dan sebutkan nama pastinya di komentar (misal: // Gunakan library PubSubClient by Nick O'Leary). Jangan mengarang library acak.
+7. HEMAT TOKEN PADA REVISI: Jika saya meminta perbaikan atau penambahan fitur kecil, JANGAN mencetak ulang seluruh kode dari atas sampai bawah. Cukup berikan blok fungsi yang berubah atau bertambah, dan beritahu saya di mana harus menaruhnya.
+8. TANPA PENJELASAN DASAR (NO MANSPLAINING): Jangan buang token untuk menjelaskan konsep dasar Arduino seperti fungsi pinMode(), delay(), atau cara kerja WiFi. Fokus jelaskan logika sistem yang kompleks (seperti alur MQTT atau kompilasi frame ESP32-CAM).
+9. SERTAKAN SERIAL DEBUGGING STANDAR: Selalu gunakan baud rate 115200. Berikan Serial.print() yang informatif di setiap transisi state (misal: "MQTT Connected", "Pintu Terbuka", "Frame Dikirim") agar saya mudah melakukan troubleshooting dari Serial Monitor.
+10. CEGAH NON-BLOCKING ERROR: Hindari penggunaan delay() panjang di dalam void loop() yang bisa membuat koneksi WiFi/MQTT terputus. Gunakan millis() jika perlu jeda waktu.
