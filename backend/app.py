@@ -1,0 +1,243 @@
+import os
+import threading
+from datetime import datetime
+
+from flask import Flask, jsonify, request
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+import paho.mqtt.client as mqtt
+import requests as http_requests
+
+# ============================================================
+# Flask App
+# ============================================================
+app = Flask(__name__)
+
+# ============================================================
+# Konfigurasi MongoDB
+# Database: smart_box | Collection: packages
+# ============================================================
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/smart_box")
+mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+db = mongo_client["smart_box"]
+packages_col = db["packages"]
+
+# ============================================================
+# Konfigurasi MQTT (broker.avisha.id)
+# ============================================================
+MQTT_BROKER = "broker.avisha.id"
+MQTT_PORT = 1883
+MQTT_USERNAME = "barka"
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "GANTI_DENGAN_PASSWORD_ANDA")
+MQTT_TOPIC_KONTROL = "barka/kontrol"
+
+mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="keemabox-server")
+mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+
+def on_connect(client, userdata, flags, rc, properties):
+    if rc == 0:
+        print("MQTT Connected ke broker.avisha.id")
+    else:
+        print(f"MQTT Connection FAILED, return code: {rc}")
+
+
+def on_disconnect(client, userdata, flags, rc, properties):
+    print(f"MQTT Disconnected, return code: {rc}")
+
+
+mqtt_client.on_connect = on_connect
+mqtt_client.on_disconnect = on_disconnect
+
+# ============================================================
+# Konfigurasi Telegram Bot
+# Set via environment variable:
+#   export TELEGRAM_BOT_TOKEN="123456:ABC-DEF..."
+#   export TELEGRAM_CHAT_ID="-100xxxxxxxxxx"
+# ============================================================
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def send_telegram_notification(resi, barang):
+    """Kirim notifikasi ke Telegram saat resi tervalidasi."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram: TOKEN atau CHAT_ID belum di-set, notifikasi dilewati.")
+        return False
+
+    pesan = (
+        "📦 *PAKET TIBA!*\n"
+        "━━━━━━━━━━━━━━━\n"
+        f"📋 Barang: *{barang}*\n"
+        f"🔖 Resi: `{resi}`\n"
+        f"🕐 Waktu: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}\n"
+        "━━━━━━━━━━━━━━━\n"
+        "Kurir sedang menunggu. Silakan buka Dashboard untuk membuka pintu kotak."
+    )
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": pesan,
+        "parse_mode": "Markdown"
+    }
+
+    try:
+        resp = http_requests.post(url, json=payload, timeout=10)
+        if resp.status_code == 200:
+            print(f"Telegram: Notifikasi terkirim (resi: {resi})")
+            return True
+        else:
+            print(f"Telegram: Gagal kirim, status {resp.status_code} - {resp.text}")
+            return False
+    except Exception as e:
+        print(f"Telegram: Error - {e}")
+        return False
+
+
+# ============================================================
+# Routes
+# ============================================================
+
+@app.route("/")
+def index():
+    """Health check & status koneksi."""
+    try:
+        mongo_client.admin.command("ping")
+        db_status = "MongoDB Connected"
+    except ConnectionFailure:
+        db_status = "MongoDB Connection FAILED"
+
+    mqtt_status = "Connected" if mqtt_client.is_connected() else "Disconnected"
+
+    return jsonify({
+        "project": "KeeMaBox - Smart Delivery Box",
+        "status": "Server Running",
+        "database": db_status,
+        "mqtt": mqtt_status
+    })
+
+
+@app.route("/api/validasi_resi", methods=["POST"])
+def validasi_resi():
+    """
+    Menerima JSON { "resi_number": "..." }.
+    Cek ke MongoDB -> Jika ada, kirim notifikasi Telegram.
+    """
+    data = request.get_json(silent=True)
+    if not data or "resi_number" not in data:
+        return jsonify({"success": False, "message": "Field 'resi_number' wajib diisi."}), 400
+
+    resi_number = data["resi_number"].strip()
+    if not resi_number:
+        return jsonify({"success": False, "message": "Nomor resi tidak boleh kosong."}), 400
+
+    # Cari resi di collection packages
+    paket = packages_col.find_one({"resi_number": resi_number})
+
+    if not paket:
+        print(f"Validasi: Resi '{resi_number}' TIDAK ditemukan di database.")
+        return jsonify({"success": False, "message": "Nomor resi tidak ditemukan."}), 404
+
+    # Resi ditemukan -> kirim notifikasi Telegram
+    nama_barang = paket.get("nama_barang", "Tidak diketahui")
+    send_telegram_notification(resi_number, nama_barang)
+
+    # Update status paket
+    packages_col.update_one(
+        {"_id": paket["_id"]},
+        {"$set": {"status": "validated", "validated_at": datetime.now()}}
+    )
+    print(f"Validasi: Resi '{resi_number}' VALID -> Notifikasi Telegram terkirim.")
+
+    return jsonify({
+        "success": True,
+        "message": "Resi valid! Notifikasi telah dikirim ke pemilik.",
+        "data": {
+            "resi_number": resi_number,
+            "nama_barang": nama_barang,
+            "status": "validated"
+        }
+    })
+
+
+@app.route("/api/buka_pintu", methods=["POST"])
+def buka_pintu():
+    """Publish perintah OPEN ke MQTT topic barka/kontrol."""
+    if not mqtt_client.is_connected():
+        print("Buka Pintu: MQTT tidak terkoneksi, gagal publish.")
+        return jsonify({"success": False, "message": "MQTT broker tidak terkoneksi."}), 503
+
+    result = mqtt_client.publish(MQTT_TOPIC_KONTROL, "OPEN", qos=1)
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        print(f"Buka Pintu: MQTT Publish 'OPEN' ke topic '{MQTT_TOPIC_KONTROL}' -> OK")
+        return jsonify({"success": True, "message": "Perintah OPEN berhasil dikirim ke kotak."})
+    else:
+        print(f"Buka Pintu: MQTT Publish GAGAL, rc={result.rc}")
+        return jsonify({"success": False, "message": "Gagal mengirim perintah ke kotak."}), 500
+
+
+@app.route("/api/upload_frame", methods=["POST"])
+def upload_frame():
+    """
+    Endpoint dummy untuk menerima frame gambar dari ESP32-CAM.
+    Akan diimplementasi penuh di Phase 5.
+    """
+    if "frame" not in request.files:
+        return jsonify({"success": False, "message": "File 'frame' tidak ditemukan dalam request."}), 400
+
+    frame_file = request.files["frame"]
+    if frame_file.filename == "":
+        return jsonify({"success": False, "message": "Nama file kosong."}), 400
+
+    # TODO Phase 5: Simpan frame ke /static/uploads/ dan kompilasi ke MP4
+    print(f"Upload Frame: Diterima '{frame_file.filename}' ({frame_file.content_length} bytes)")
+
+    return jsonify({
+        "success": True,
+        "message": "Frame diterima.",
+        "filename": frame_file.filename
+    })
+
+
+# ============================================================
+# MQTT Connect (lazy init via before_request)
+# Menjamin MQTT connect di worker process yang benar,
+# bukan di parent reloader Flask debug mode.
+# ============================================================
+import atexit
+
+mqtt_started = False
+
+def start_mqtt():
+    """Jalankan MQTT client loop di background thread."""
+    global mqtt_started
+    if mqtt_started:
+        return
+    try:
+        mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+        mqtt_client.loop_start()
+        mqtt_started = True
+        atexit.register(lambda: mqtt_client.loop_stop())
+        print(f"MQTT: Terhubung ke {MQTT_BROKER}:{MQTT_PORT}")
+    except Exception as e:
+        print(f"MQTT: Gagal connect - {e}")
+
+
+@app.before_request
+def ensure_mqtt():
+    """Auto-connect MQTT saat request pertama masuk."""
+    start_mqtt()
+
+
+# ============================================================
+# Main
+# ============================================================
+if __name__ == "__main__":
+    print("=== KeeMaBox Flask Server Starting ===")
+    print(f"MONGO_URI : {MONGO_URI}")
+    print(f"MQTT      : {MQTT_BROKER}:{MQTT_PORT} (user: {MQTT_USERNAME})")
+    print(f"TELEGRAM  : {'Configured' if TELEGRAM_BOT_TOKEN else 'NOT SET'}")
+
+    app.run(host="0.0.0.0", port=5000, debug=True)
+

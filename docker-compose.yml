@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  db:
+    image: mongo:latest
+    container_name: keemabox_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  web:
+    build: ./backend
+    container_name: keemabox_flask
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      - MONGO_URI=mongodb://db:27017/smart_box
+      - FLASK_ENV=development
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

@@ -9,3 +9,4 @@ beberapa aturan yang harus anda patuhi:
 8. TANPA PENJELASAN DASAR (NO MANSPLAINING): Jangan buang token untuk menjelaskan konsep dasar Arduino seperti fungsi pinMode(), delay(), atau cara kerja WiFi. Fokus jelaskan logika sistem yang kompleks (seperti alur MQTT atau kompilasi frame ESP32-CAM).
 9. SERTAKAN SERIAL DEBUGGING STANDAR: Selalu gunakan baud rate 115200. Berikan Serial.print() yang informatif di setiap transisi state (misal: "MQTT Connected", "Pintu Terbuka", "Frame Dikirim") agar saya mudah melakukan troubleshooting dari Serial Monitor.
 10. CEGAH NON-BLOCKING ERROR: Hindari penggunaan delay() panjang di dalam void loop() yang bisa membuat koneksi WiFi/MQTT terputus. Gunakan millis() jika perlu jeda waktu.
+11. projek ini menggunakan referensi dari /home/akbar/devbeeloper/iot/KeeMaBox/reference/journal.pdf
