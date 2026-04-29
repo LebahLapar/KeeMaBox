@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeeMaBox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+        }
+
+        /* Ambient glow di belakang card */
+        .glow-bg::before {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            border-radius: 50%;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .input-field {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: rgba(16, 185, 129, 0.5);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 0 20px rgba(16,185,129,0.25);
+            transition: all 0.3s ease;
+        }
+        .btn-login:hover:not(:disabled) {
+            box-shadow: 0 0 35px rgba(16,185,129,0.45);
+            transform: translateY(-1px);
+        }
+        .btn-login:active { transform: scale(0.98); }
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Shake animation untuk error */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%       { transform: translateX(-6px); }
+            40%       { transform: translateX(6px); }
+            60%       { transform: translateX(-4px); }
+            80%       { transform: translateX(4px); }
+        }
+        .shake { animation: shake 0.4s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    </style>
+</head>
+<body class="text-white flex items-center justify-center min-h-screen px-4">
+
+    <!-- Ambient glow wrapper -->
+    <div class="glow-bg relative w-full max-w-sm">
+
+        <!-- Card -->
+        <div class="glass rounded-2xl p-8 shadow-2xl fade-in" id="login-card">
+
+            <!-- Logo / Branding -->
+            <div class="text-center mb-8">
+                <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20
+                            flex items-center justify-center text-2xl">
+                    📦
+                </div>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-300
+                           bg-clip-text text-transparent">
+                    KeeMaBox
+                </h1>
+                <p class="text-xs text-slate-500 mt-1">Control Panel</p>
+            </div>
+
+            <!-- Error Banner -->
+            {% if error %}
+            <div id="error-banner"
+                 class="shake mb-5 flex items-center gap-2 bg-red-500/10 border border-red-500/20
+                        rounded-xl px-4 py-3 text-sm text-red-400">
+                <span class="text-base">⚠️</span>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+
+            <!-- Form -->
+            <form method="POST" action="/dca-dooa-001" id="login-form" onsubmit="handleSubmit(event)">
+
+                <!-- Username -->
+                <div class="mb-4">
+                    <label class="block text-xs font-medium text-slate-400 mb-2">Username</label>
+                    <input
+                        type="text"
+                        name="username"
+                        id="input-username"
+                        autocomplete="username"
+                        placeholder="Masukkan username"
+                        required
+                        class="input-field w-full rounded-xl px-4 py-3 text-sm text-white
+                               placeholder-slate-600"
+                    />
+                </div>
+
+                <!-- Password -->
+                <div class="mb-6">
+                    <label class="block text-xs font-medium text-slate-400 mb-2">Password</label>
+                    <div class="relative">
+                        <input
+                            type="password"
+                            name="password"
+                            id="input-password"
+                            autocomplete="current-password"
+                            placeholder="Masukkan password"
+                            required
+                            class="input-field w-full rounded-xl px-4 py-3 text-sm text-white
+                                   placeholder-slate-600 pr-11"
+                        />
+                        <!-- Toggle show/hide password -->
+                        <button type="button"
+                                onclick="togglePassword()"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500
+                                       hover:text-slate-300 transition cursor-pointer"
+                                title="Tampilkan / Sembunyikan Password">
+                            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4"
+                                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5
+                                         c4.477 0 8.268 2.943 9.542 7
+                                         -1.274 4.057-5.065 7-9.542 7
+                                         -4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" id="btn-submit"
+                        class="btn-login w-full text-white font-semibold text-sm
+                               py-3 rounded-xl cursor-pointer">
+                    Masuk
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <script>
+        // Auto-fokus input pertama yang kosong
+        window.addEventListener('load', () => {
+            const u = document.getElementById('input-username');
+            const p = document.getElementById('input-password');
+            if (u && !u.value) u.focus();
+            else if (p) p.focus();
+        });
+
+        // Loading state saat form disubmit
+        function handleSubmit(e) {
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin inline w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg"
+                     fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10"
+                            stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                Memverifikasi...`;
+        }
+
+        // Toggle show/hide password
+        function togglePassword() {
+            const input = document.getElementById('input-password');
+            const icon  = document.getElementById('eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M13.875 18.825A10.05 10.05 0 0112 19
+                             c-4.477 0-8.268-2.943-9.542-7
+                             a9.97 9.97 0 011.563-3.029m5.858.908
+                             a3 3 0 114.243 4.243M9.878 9.878
+                             l4.242 4.242M9.88 9.88
+                             l-3.29-3.29m7.532 7.532
+                             l3.29 3.29M3 3l3.59 3.59
+                             m0 0A9.953 9.953 0 0112 5
+                             c4.477 0 8.268 2.943 9.542 7
+                             a10.025 10.025 0 01-4.132 5.411
+                             m0 0L21 21"/>`;
+            } else {
+                input.type = 'password';
+                icon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5
+                             c4.477 0 8.268 2.943 9.542 7
+                             -1.274 4.057-5.065 7-9.542 7
+                             -4.477 0-8.268-2.943-9.542-7z"/>`;
+            }
+        }
+    </script>
+
+</body>
+</html>
