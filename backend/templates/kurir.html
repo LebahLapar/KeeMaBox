@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="KeeMaBox - Portal input resi untuk kurir">
+    <title>Portal Kurir — KeeMaBox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .glass {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            box-shadow: 0 0 20px rgba(59,130,246,0.3);
+            transition: all 0.3s ease;
+        }
+        .btn-submit:hover {
+            box-shadow: 0 0 35px rgba(59,130,246,0.5);
+            transform: translateY(-2px);
+        }
+        .btn-submit:active { transform: scale(0.97); }
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Success state animation */
+        .success-enter {
+            animation: successPop 0.5s cubic-bezier(0.16,1,0.3,1);
+        }
+        @keyframes successPop {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .check-circle {
+            animation: drawCheck 0.6s 0.3s ease forwards;
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+        }
+        @keyframes drawCheck {
+            to { stroke-dashoffset: 0; }
+        }
+
+        .checkmark-path {
+            animation: drawCheck 0.4s 0.7s ease forwards;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+        }
+
+        /* Input focus glow */
+        .input-glow:focus {
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.3);
+        }
+
+        /* Shake animation for error */
+        .shake {
+            animation: shake 0.4s ease;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+    </style>
+</head>
+<body class="text-white px-4">
+
+    <div class="w-full max-w-md">
+
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold tracking-tight">
+                📦 <span class="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">KeeMaBox</span>
+            </h1>
+            <p class="text-sm text-slate-400 mt-1">Portal Kurir</p>
+        </div>
+
+        <!-- Form Card -->
+        <div id="form-section" class="glass rounded-2xl p-6 sm:p-8">
+            <h2 class="text-lg font-semibold text-center mb-1">Validasi Pengiriman</h2>
+            <p class="text-xs text-slate-400 text-center mb-6">Masukkan nomor resi untuk membuka kotak</p>
+
+            <form id="resi-form" onsubmit="submitResi(event)">
+                <label for="resi-input" class="block text-xs font-medium text-slate-300 mb-2">Nomor Resi</label>
+                <input
+                    id="resi-input"
+                    type="text"
+                    placeholder="Contoh: JNT-20260427-001"
+                    required
+                    autocomplete="off"
+                    class="input-glow w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5
+                           text-white placeholder-slate-500 text-sm outline-none transition"
+                />
+
+                <p id="error-msg" class="text-xs text-red-400 mt-2 hidden"></p>
+
+                <button id="btn-submit" type="submit"
+                        class="btn-submit w-full mt-5 text-white font-semibold py-3.5 rounded-xl
+                               flex items-center justify-center gap-2 cursor-pointer">
+                    <span id="btn-text">Validasi Resi</span>
+                    <svg id="btn-spinner" class="animate-spin w-5 h-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- Success State (hidden by default) -->
+        <div id="success-section" class="hidden">
+            <div class="glass rounded-2xl p-8 sm:p-10 text-center success-enter">
+
+                <!-- Animated Checkmark -->
+                <div class="flex justify-center mb-5">
+                    <svg class="w-20 h-20" viewBox="0 0 52 52">
+                        <circle class="check-circle" cx="26" cy="26" r="25" fill="none"
+                                stroke="#4ade80" stroke-width="2"/>
+                        <path class="checkmark-path" fill="none" stroke="#4ade80"
+                              stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+                              d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                    </svg>
+                </div>
+
+                <h2 class="text-2xl font-bold text-green-400 mb-2">KOTAK BERHASIL DIBUKA!</h2>
+                <p class="text-sm text-slate-400 mb-1">Resi: <span id="success-resi" class="font-mono text-slate-300"></span></p>
+                <p class="text-sm text-slate-400 mb-6">Barang: <span id="success-barang" class="text-slate-300"></span></p>
+
+                <div class="glass rounded-xl p-4 text-left text-xs text-slate-400 space-y-1.5">
+                    <p>✅ Notifikasi sudah dikirim ke pemilik</p>
+                    <p>📦 Silakan letakkan paket ke dalam kotak</p>
+                    <p>🚪 Pintu akan terkunci otomatis setelah ditutup</p>
+                </div>
+
+                <button onclick="resetForm()"
+                        class="mt-6 text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer underline">
+                    Input resi lain
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        async function submitResi(e) {
+            e.preventDefault();
+
+            const input = document.getElementById('resi-input');
+            const btn = document.getElementById('btn-submit');
+            const btnText = document.getElementById('btn-text');
+            const spinner = document.getElementById('btn-spinner');
+            const errorMsg = document.getElementById('error-msg');
+
+            const resiNumber = input.value.trim();
+            if (!resiNumber) return;
+
+            // Reset error
+            errorMsg.classList.add('hidden');
+            input.classList.remove('border-red-500');
+
+            // Loading state
+            btn.disabled = true;
+            btnText.textContent = 'Memvalidasi...';
+            spinner.classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/validasi_resi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resi_number: resiNumber })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    // Show success state
+                    document.getElementById('success-resi').textContent = data.data.resi_number;
+                    document.getElementById('success-barang').textContent = data.data.nama_barang;
+                    document.getElementById('form-section').classList.add('hidden');
+                    document.getElementById('success-section').classList.remove('hidden');
+                } else {
+                    // Show error
+                    errorMsg.textContent = data.message || 'Nomor resi tidak valid.';
+                    errorMsg.classList.remove('hidden');
+                    input.classList.add('border-red-500');
+                    input.parentElement.classList.add('shake');
+                    setTimeout(() => input.parentElement.classList.remove('shake'), 400);
+                }
+            } catch (err) {
+                errorMsg.textContent = 'Gagal terhubung ke server.';
+                errorMsg.classList.remove('hidden');
+            }
+
+            // Reset button
+            btn.disabled = false;
+            btnText.textContent = 'Validasi Resi';
+            spinner.classList.add('hidden');
+        }
+
+        function resetForm() {
+            document.getElementById('resi-input').value = '';
+            document.getElementById('error-msg').classList.add('hidden');
+            document.getElementById('form-section').classList.remove('hidden');
+            document.getElementById('success-section').classList.add('hidden');
+            document.getElementById('resi-input').focus();
+        }
+    </script>
+</body>
+</html>

@@ -2,9 +2,10 @@ import os
 import threading
 from datetime import datetime
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
+from bson import ObjectId
 import paho.mqtt.client as mqtt
 import requests as http_requests
 
@@ -96,12 +97,28 @@ def send_telegram_notification(resi, barang):
 
 
 # ============================================================
-# Routes
+# Routes — Pages
 # ============================================================
 
 @app.route("/")
 def index():
-    """Health check & status koneksi."""
+    """Dashboard Owner — render halaman HTML."""
+    return render_template("index.html")
+
+
+@app.route("/kurir")
+def kurir():
+    """Portal Kurir — halaman input resi."""
+    return render_template("kurir.html")
+
+
+# ============================================================
+# Routes — API
+# ============================================================
+
+@app.route("/api/status")
+def api_status():
+    """Health check & status koneksi (dipakai frontend)."""
     try:
         mongo_client.admin.command("ping")
         db_status = "MongoDB Connected"
@@ -116,6 +133,105 @@ def index():
         "database": db_status,
         "mqtt": mqtt_status
     })
+
+
+@app.route("/api/packages")
+def api_packages():
+    """Ambil daftar semua paket dari MongoDB."""
+    pkgs = list(packages_col.find().sort("_id", -1))
+    for p in pkgs:
+        p["_id"] = str(p["_id"])
+        if "validated_at" in p and p["validated_at"]:
+            p["validated_at"] = p["validated_at"].isoformat()
+    return jsonify({"packages": pkgs})
+
+
+@app.route("/api/tambah_paket", methods=["POST"])
+def tambah_paket():
+    """Daftarkan paket baru ke MongoDB."""
+    data = request.get_json(silent=True)
+    if not data or "nama_barang" not in data or "resi_number" not in data:
+        return jsonify({"success": False, "message": "Field 'nama_barang' dan 'resi_number' wajib diisi."}), 400
+
+    nama_barang = data["nama_barang"].strip()
+    resi_number = data["resi_number"].strip()
+
+    if not nama_barang or not resi_number:
+        return jsonify({"success": False, "message": "Nama barang dan nomor resi tidak boleh kosong."}), 400
+
+    # Cek duplikat resi
+    if packages_col.find_one({"resi_number": resi_number}):
+        return jsonify({"success": False, "message": "Nomor resi sudah terdaftar."}), 409
+
+    packages_col.insert_one({
+        "nama_barang": nama_barang,
+        "resi_number": resi_number,
+        "status": "pending",
+        "created_at": datetime.now()
+    })
+    print(f"Paket Baru: '{nama_barang}' (resi: {resi_number}) -> Terdaftar.")
+
+    return jsonify({
+        "success": True,
+        "message": "Paket berhasil didaftarkan.",
+        "data": {
+            "nama_barang": nama_barang,
+            "resi_number": resi_number,
+            "status": "pending"
+        }
+    })
+
+
+@app.route("/api/edit_paket/<id>", methods=["PUT", "POST"])
+def edit_paket(id):
+    """Edit nama_barang dan resi_number paket berdasarkan ObjectID."""
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        return jsonify({"success": False, "message": "ID tidak valid."}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "message": "Body JSON wajib diisi."}), 400
+
+    update_fields = {}
+    if "nama_barang" in data and data["nama_barang"].strip():
+        update_fields["nama_barang"] = data["nama_barang"].strip()
+    if "resi_number" in data and data["resi_number"].strip():
+        # Cek duplikat resi (kecuali milik sendiri)
+        existing = packages_col.find_one({"resi_number": data["resi_number"].strip(), "_id": {"$ne": obj_id}})
+        if existing:
+            return jsonify({"success": False, "message": "Nomor resi sudah dipakai paket lain."}), 409
+        update_fields["resi_number"] = data["resi_number"].strip()
+
+    if not update_fields:
+        return jsonify({"success": False, "message": "Tidak ada data yang diubah."}), 400
+
+    update_fields["updated_at"] = datetime.now()
+    result = packages_col.update_one({"_id": obj_id}, {"$set": update_fields})
+
+    if result.matched_count == 0:
+        return jsonify({"success": False, "message": "Paket tidak ditemukan."}), 404
+
+    print(f"Edit Paket: ID {id} -> {update_fields}")
+    return jsonify({"success": True, "message": "Paket berhasil diperbarui."})
+
+
+@app.route("/api/hapus_paket/<id>", methods=["DELETE"])
+def hapus_paket(id):
+    """Hapus paket dari MongoDB berdasarkan ObjectID."""
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        return jsonify({"success": False, "message": "ID tidak valid."}), 400
+
+    result = packages_col.delete_one({"_id": obj_id})
+
+    if result.deleted_count == 0:
+        return jsonify({"success": False, "message": "Paket tidak ditemukan."}), 404
+
+    print(f"Hapus Paket: ID {id} -> Dihapus.")
+    return jsonify({"success": True, "message": "Paket berhasil dihapus."})
 
 
 @app.route("/api/validasi_resi", methods=["POST"])
