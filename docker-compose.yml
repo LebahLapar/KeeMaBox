@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   db:
@@ -22,6 +22,7 @@ services:
     environment:
       - MONGO_URI=mongodb://db:27017/smart_box
       - FLASK_ENV=development
+      - TZ=Asia/Jakarta
     volumes:
       - ./backend:/app
     restart: unless-stopped

@@ -1,7 +1,7 @@
 import hmac
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import paho.mqtt.client as mqtt
 import requests as http_requests
@@ -30,6 +30,9 @@ app.secret_key = os.environ.get(
 )
 app.config["SESSION_COOKIE_HTTPONLY"] = True  # Cegah akses JS ke cookie (OWASP A07)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigasi CSRF (OWASP A01)
+
+# Zona waktu WIB — sebagai fallback eksplisit jika TZ env var belum terbaca
+WIB = timezone(timedelta(hours=7))
 
 # ============================================================
 # Kredensial Admin (Single-User Auth)
@@ -95,7 +98,7 @@ def send_telegram_notification(resi, barang):
         "━━━━━━━━━━━━━━━\n"
         f"📋 Barang: *{barang}*\n"
         f"🔖 Resi: `{resi}`\n"
-        f"🕐 Waktu: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}\n"
+        f"🕐 Waktu: {datetime.now(WIB).strftime('%d-%m-%Y %H:%M:%S')} WIB\n"
         "━━━━━━━━━━━━━━━\n"
         "Kurir sedang menunggu. Silakan buka Dashboard untuk membuka pintu kotak."
     )
