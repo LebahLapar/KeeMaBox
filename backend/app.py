@@ -1,8 +1,12 @@
+import atexit
+import glob
 import hmac
 import os
 import threading
 from datetime import datetime, timedelta, timezone
 
+import av
+import numpy as np
 import paho.mqtt.client as mqtt
 import requests as http_requests
 from bson import ObjectId
@@ -16,6 +20,7 @@ from flask import (
     session,
     url_for,
 )
+from PIL import Image
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 
@@ -33,6 +38,15 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Mitigasi CSRF (OWASP A01)
 
 # Zona waktu WIB — sebagai fallback eksplisit jika TZ env var belum terbaca
 WIB = timezone(timedelta(hours=7))
+
+# ============================================================
+# Konfigurasi Folder Upload (Phase 5)
+# UPLOAD_FOLDER : Penyimpanan video .mp4 hasil kompilasi
+# TEMP_FOLDER   : Penyimpanan sementara frame .jpg dari ESP32-CAM
+# ============================================================
+UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
+TEMP_FOLDER = os.path.join(UPLOAD_FOLDER, "temp_frames")
+os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # ============================================================
 # Kredensial Admin (Single-User Auth)
@@ -150,7 +164,6 @@ def kurir():
 def login():
     """Halaman login rahasia untuk admin."""
     if request.method == "GET":
-        # Jika sudah login, langsung redirect ke dashboard
         if is_logged_in():
             return redirect(url_for("dashboard"))
         return render_template("login.html", error=None)
@@ -189,7 +202,7 @@ def dashboard():
     Ini mencegah attacker mengetahui bahwa halaman ini ada.
     """
     if not is_logged_in():
-        abort(404)  # Fake 404 — tidak mengungkap keberadaan rute ini
+        abort(404)
     return render_template("index.html")
 
 
@@ -271,7 +284,6 @@ def tambah_paket():
             }
         ), 400
 
-    # Cek duplikat resi
     if packages_col.find_one({"resi_number": resi_number}):
         return jsonify(
             {"success": False, "message": "Nomor resi sudah terdaftar."}
@@ -319,7 +331,6 @@ def edit_paket(id):
     if "nama_barang" in data and data["nama_barang"].strip():
         update_fields["nama_barang"] = data["nama_barang"].strip()
     if "resi_number" in data and data["resi_number"].strip():
-        # Cek duplikat resi (kecuali milik sendiri)
         existing = packages_col.find_one(
             {"resi_number": data["resi_number"].strip(), "_id": {"$ne": obj_id}}
         )
@@ -383,7 +394,6 @@ def validasi_resi():
             {"success": False, "message": "Nomor resi tidak boleh kosong."}
         ), 400
 
-    # Cari resi di collection packages
     paket = packages_col.find_one({"resi_number": resi_number})
 
     if not paket:
@@ -392,11 +402,9 @@ def validasi_resi():
             {"success": False, "message": "Nomor resi tidak ditemukan."}
         ), 404
 
-    # Resi ditemukan -> kirim notifikasi Telegram
     nama_barang = paket.get("nama_barang", "Tidak diketahui")
     send_telegram_notification(resi_number, nama_barang)
 
-    # Update status paket
     packages_col.update_one(
         {"_id": paket["_id"]},
         {"$set": {"status": "validated", "validated_at": datetime.now()}},
@@ -441,11 +449,17 @@ def buka_pintu():
         ), 500
 
 
+# ============================================================
+# Routes — Phase 5: Frame Upload & Video Compilation
+# ============================================================
+
+
 @app.route("/api/upload_frame", methods=["POST"])
 def upload_frame():
     """
-    Endpoint untuk menerima frame gambar dari ESP32-CAM.
-    Akan diimplementasi penuh di Phase 5.
+    Menerima file .jpg dari ESP32-CAM dan menyimpannya ke TEMP_FOLDER.
+    Nama file berbasis timestamp presisi tinggi untuk menjamin urutan frame.
+    Endpoint PUBLIK — dipanggil langsung oleh hardware ESP32-CAM.
     """
     if "frame" not in request.files:
         return jsonify(
@@ -456,13 +470,105 @@ def upload_frame():
     if frame_file.filename == "":
         return jsonify({"success": False, "message": "Nama file kosong."}), 400
 
-    # TODO Phase 5: Simpan frame ke /static/uploads/ dan kompilasi ke MP4
-    print(
-        f"Upload Frame: Diterima '{frame_file.filename}' ({frame_file.content_length} bytes)"
+    # Validasi ekstensi — hanya terima .jpg / .jpeg (OWASP A03)
+    ext = os.path.splitext(frame_file.filename)[1].lower()
+    if ext not in (".jpg", ".jpeg"):
+        return jsonify(
+            {"success": False, "message": "Hanya file JPG yang diterima."}
+        ), 400
+
+    # Nama file berbasis timestamp mikro-detik → urutan alfabetis = urutan waktu
+    timestamp = datetime.now(WIB).strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"frame_{timestamp}.jpg"
+    save_path = os.path.join(TEMP_FOLDER, filename)
+    frame_file.save(save_path)
+
+    print(f"Upload Frame: Disimpan '{filename}'")
+    return jsonify(
+        {"success": True, "message": "Frame diterima.", "filename": filename}
     )
 
+
+@app.route("/api/compile_video", methods=["POST"])
+def compile_video():
+    """
+    Mengambil semua frame .jpg di TEMP_FOLDER, merajutnya menjadi video .mp4
+    menggunakan PyAV (library: PyAV by PyAV-Org), lalu menghapus file mentah.
+    Endpoint PUBLIK — dipanggil oleh ESP32-CAM saat pintu ditutup.
+
+    Pipeline:
+      JPG files (sorted) → PIL.Image → NumPy array → av.VideoFrame → H264 encode → MP4
+    """
+    # 1. Ambil semua frame, urutkan alfabetis (= urutan waktu karena nama timestamp)
+    frame_files = sorted(glob.glob(os.path.join(TEMP_FOLDER, "frame_*.jpg")))
+
+    if not frame_files:
+        print("Compile Video: Tidak ada frame di temp folder.")
+        return jsonify(
+            {"success": False, "message": "Tidak ada frame tersedia untuk dikompilasi."}
+        ), 400
+
+    print(f"Compile Video: Ditemukan {len(frame_files)} frame. Memulai kompilasi...")
+
+    # 2. Baca dimensi dari frame pertama
+    with Image.open(frame_files[0]) as first_img:
+        width, height = first_img.size
+
+    # 3. Buat nama file video unik berbasis timestamp
+    timestamp = datetime.now(WIB).strftime("%Y%m%d_%H%M%S")
+    video_filename = f"video_{timestamp}.mp4"
+    video_path = os.path.join(UPLOAD_FOLDER, video_filename)
+
+    # 4. Kompilasi frame ke MP4 menggunakan PyAV
+    try:
+        output = av.open(video_path, mode="w")
+        stream = output.add_stream("h264", rate=5)  # 5 FPS = 1 frame tiap 200ms
+        stream.width = width
+        stream.height = height
+        stream.pix_fmt = "yuv420p"
+
+        for img_path in frame_files:
+            img = Image.open(img_path).convert("RGB")
+            frame_array = np.array(img)
+            video_frame = av.VideoFrame.from_ndarray(frame_array, format="rgb24")
+            for packet in stream.encode(video_frame):
+                output.mux(packet)
+
+        # Flush sisa buffer encoder
+        for packet in stream.encode():
+            output.mux(packet)
+
+        output.close()
+        print(
+            f"Compile Video: Video '{video_filename}' berhasil dibuat ({width}x{height}, {len(frame_files)} frames)."
+        )
+
+    except Exception as e:
+        print(f"Compile Video: Error saat kompilasi - {e}")
+        return jsonify(
+            {"success": False, "message": f"Gagal kompilasi video: {str(e)}"}
+        ), 500
+
+    # 5. Hapus semua file frame mentah agar storage tidak penuh
+    deleted_count = 0
+    for f in frame_files:
+        try:
+            os.remove(f)
+            deleted_count += 1
+        except Exception as e:
+            print(f"Compile Video: Gagal hapus '{f}' - {e}")
+
+    print(f"Compile Video: {deleted_count} file frame dihapus dari temp folder.")
+
+    video_url = f"/static/uploads/{video_filename}"
     return jsonify(
-        {"success": True, "message": "Frame diterima.", "filename": frame_file.filename}
+        {
+            "success": True,
+            "message": f"Video berhasil dikompilasi dari {len(frame_files)} frame.",
+            "video_url": video_url,
+            "filename": video_filename,
+            "frame_count": len(frame_files),
+        }
     )
 
 
@@ -471,8 +577,6 @@ def upload_frame():
 # Menjamin MQTT connect di worker process yang benar,
 # bukan di parent reloader Flask debug mode.
 # ============================================================
-import atexit
-
 mqtt_started = False
 
 
@@ -502,11 +606,12 @@ def ensure_mqtt():
 # ============================================================
 if __name__ == "__main__":
     print("=== KeeMaBox Flask Server Starting ===")
-    print(f"MONGO_URI : {MONGO_URI}")
-    print(f"MQTT      : {MQTT_BROKER}:{MQTT_PORT} (user: {MQTT_USERNAME})")
-    print(f"TELEGRAM  : {'Configured' if TELEGRAM_BOT_TOKEN else 'NOT SET'}")
+    print(f"MONGO_URI     : {MONGO_URI}")
+    print(f"MQTT          : {MQTT_BROKER}:{MQTT_PORT} (user: {MQTT_USERNAME})")
+    print(f"TELEGRAM      : {'Configured' if TELEGRAM_BOT_TOKEN else 'NOT SET'}")
+    print(f"UPLOAD_FOLDER : {UPLOAD_FOLDER}")
+    print(f"TEMP_FOLDER   : {TEMP_FOLDER}")
     print(
-        f"ADMIN     : {'Configured' if ADMIN_PASSWORD != 'GANTI_DENGAN_PASSWORD_ANDA' else 'WARNING: Gunakan password dari env!'}"
+        f"ADMIN         : {'Configured' if ADMIN_PASSWORD != 'GANTI_DENGAN_PASSWORD_ANDA' else 'WARNING: Gunakan password dari env!'}"
     )
-
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -3,3 +3,5 @@ pymongo==4.12.1
 paho-mqtt==2.1.0
 requests==2.32.3
 av==14.4.0
+Pillow
+numpy

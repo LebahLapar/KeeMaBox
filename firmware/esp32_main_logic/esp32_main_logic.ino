@@ -25,8 +25,8 @@
 // =============================================================
 // KONFIGURASI JARINGAN — Ganti sesuai WiFi kamu
 // =============================================================
-const char* WIFI_SSID     = "iPhone 15 Pro Max";
-const char* WIFI_PASSWORD = "04271908";
+const char* WIFI_SSID     = "Wifi Rian";
+const char* WIFI_PASSWORD = "admin123";
 
 // =============================================================
 // KONFIGURASI MQTT
