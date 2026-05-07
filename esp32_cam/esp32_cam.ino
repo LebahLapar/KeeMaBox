@@ -5,16 +5,16 @@
 // ==========================================
 // Konfigurasi WiFi
 // ==========================================
-const char* ssid = "Wifi Rian";
-const char* password = "admin123";
+const char* ssid = "Akbar";
+const char* password = "laparlebah";
 
 // ==========================================
 // Konfigurasi Server (Backend)
 // ==========================================
-const char* server_host = "192.168.0.112";
+const char* server_host = "10.169.251.143";
 const int server_port = 5000;
 const char* upload_path = "/api/upload_frame";
-const char* compile_url = "http://192.168.0.112:5000/api/compile_video";
+const char* compile_url = "http://10.169.251.143:5000/api/compile_video";
 
 // ==========================================
 // Konfigurasi Pin

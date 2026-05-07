@@ -596,11 +596,15 @@
             // ============================================================
             // Lihat Video (placeholder)
             // ============================================================
-            function lihatVideo(resi) {
-                showToast(
-                    `Video untuk resi ${resi} belum tersedia. (Phase 5)`,
-                    "info",
-                );
+            function lihatVideo(resi, videoUrl) {
+                if (videoUrl && videoUrl !== "undefined" && videoUrl !== "") {
+                    window.open(videoUrl, '_blank');
+                } else {
+                    showToast(
+                        `Video untuk resi ${resi} belum tersedia.`,
+                        "info",
+                    );
+                }
             }
 
             // ============================================================
@@ -753,7 +757,7 @@
 
                 // Video (hanya untuk validated/delivered/selesai)
                 if (["validated", "delivered", "selesai"].includes(p.status)) {
-                    btns += `<button onclick="lihatVideo('${p.resi_number}')"
+                    btns += `<button onclick="lihatVideo('${p.resi_number}', '${p.video_url || ''}')"
                             class="btn-video text-xs font-medium px-2 py-1 rounded-lg cursor-pointer"
                             title="Lihat Video">▶</button>`;
                 }

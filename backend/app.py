@@ -560,7 +560,25 @@ def compile_video():
 
     print(f"Compile Video: {deleted_count} file frame dihapus dari temp folder.")
 
+    # Sinkronisasi Video ke Database (Anti-Race Condition)
     video_url = f"/static/uploads/{video_filename}"
+    target_package = packages_col.find_one(
+        {
+            "status": "validated",
+            "video_url": {"$exists": False}
+        },
+        sort=[("validated_at", -1)]
+    )
+
+    if target_package:
+        packages_col.update_one(
+            {"_id": target_package["_id"]},
+            {"$set": {"video_url": video_url}}
+        )
+        print(f"Compile Video: Video sukses dilampirkan ke resi {target_package['resi_number']}")
+    else:
+        print("Compile Video: Peringatan! Tidak ditemukan paket 'validated' yang menunggu video. Video disimpan yatim piatu.")
+
     return jsonify(
         {
             "success": True,

@@ -25,8 +25,8 @@
 // =============================================================
 // KONFIGURASI JARINGAN — Ganti sesuai WiFi kamu
 // =============================================================
-const char* WIFI_SSID     = "Wifi Rian";
-const char* WIFI_PASSWORD = "admin123";
+const char* WIFI_SSID     = "Akbar";
+const char* WIFI_PASSWORD = "laparlebah";
 
 // =============================================================
 // KONFIGURASI MQTT
