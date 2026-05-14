@@ -41,10 +41,11 @@ const char* MQTT_TOPIC_SUB = "barka/kontrol";
 // =============================================================
 // KONFIGURASI WAKTU (non-blocking via millis)
 // =============================================================
-const unsigned long RELAY_DURATION_MS   = 7000;  // Durasi solenoid terbuka (7 detik)
-const unsigned long MQTT_RETRY_DELAY_MS = 5000;  // Jeda antar percobaan reconnect MQTT
-const unsigned long BLINK_FAST_MS       =  150;  // Interval blink alarm (ms)
-const unsigned long BLINK_SLOW_MS       =  500;  // Interval blink saat connecting (ms)
+const unsigned long RELAY_DURATION_MS   = 20000; // Durasi solenoid terbuka (20 detik)
+const unsigned long MQTT_RETRY_DELAY_MS = 5000;   // Jeda antar percobaan reconnect MQTT
+const unsigned long BLINK_FAST_MS       =  150;   // Interval blink alarm bobol (ms)
+const unsigned long BLINK_SLOW_MS       =  500;   // Interval blink saat connecting (ms)
+const unsigned long ALARM_REMINDER_MS   =  500;   // Interval buzzer pengingat pintu (ms)
 
 // =============================================================
 // VARIABEL STATE SISTEM
@@ -53,6 +54,11 @@ const unsigned long BLINK_SLOW_MS       =  500;  // Interval blink saat connecti
 // --- State Relay & Kamera ---
 bool          relayActive    = false;  // true = solenoid sedang aktif (terbuka)
 unsigned long relayStartTime = 0;      // Timestamp saat relay diaktifkan
+
+// --- State Fase Monitoring (setelah relay OFF, tunggu pintu tertutup) ---
+bool          monitoringPhase = false; // true = relay sudah OFF, menunggu pintu ditutup
+unsigned long lastReminderBuzz = 0;    // Timestamp blink buzzer pengingat
+bool          reminderBuzzState = false;
 
 // --- State Alarm ---
 bool          alarmActive    = false;  // true = alarm anti-bobol menyala
@@ -191,24 +197,75 @@ void connectMQTT() {
 
 // =============================================================
 // FUNGSI: Handle Timer Relay (non-blocking)
-// Cek setiap loop apakah durasi 7 detik sudah terlampaui.
+// Cek setiap loop apakah durasi 20 detik sudah terlampaui.
+// Saat habis: Relay OFF, Pin 22 LANGSUNG LOW (kamera berhenti
+// paksa), lalu masuk fase monitoring reed sensor.
 // =============================================================
 void handleRelayTimer() {
     if (!relayActive) return;
 
     if (millis() - relayStartTime >= RELAY_DURATION_MS) {
-        // Waktu habis — kunci kembali (Active-Low: HIGH = Relay OFF)
-        digitalWrite(RELAY_PIN,       HIGH);
-        digitalWrite(LED_RED_PIN,     LOW);
-        digitalWrite(CAM_TRIGGER_PIN, LOW);
+        // === TRANSISI DETIK KE-20 ===
+
+        // 1. Relay OFF (Active-Low: HIGH = Relay OFF)
+        digitalWrite(RELAY_PIN, HIGH);
         relayActive = false;
+        Serial.println("[Relay] OFF → Solenoid terkunci. Toleransi 20 detik habis.");
 
-        Serial.println("[Relay] OFF → Solenoid terkunci.");
-        Serial.println("[CAM]   Trigger LOW → ESP32-CAM berhenti merekam.");
-        Serial.println("[Sistem] Sesi buka pintu selesai.");
+        // 2. Kamera LANGSUNG DIHENTIKAN PAKSA (anti memory overflow)
+        digitalWrite(CAM_TRIGGER_PIN, LOW);
+        Serial.println("[CAM]   Trigger LOW → ESP32-CAM berhenti merekam & render video.");
 
-        // Beep 1x tanda gembok terkunci kembali
+        // 3. Beep 1x tanda gembok terkunci kembali
         beepBuzzer(1, 100, 0);
+
+        // 4. Cek apakah pintu masih terbuka → masuk fase monitoring alarm
+        bool pintuTerbuka = (digitalRead(SENSOR_PIN) == HIGH);
+        if (pintuTerbuka) {
+            monitoringPhase = true;
+            Serial.println("[Monitor] Pintu masih TERBUKA. Masuk fase alarm pengingat...");
+        } else {
+            // Pintu sudah tertutup → akhiri sesi langsung
+            digitalWrite(LED_RED_PIN, LOW);
+            digitalWrite(BUZZER_PIN,  LOW);
+            sesiAman = false;
+            Serial.println("[Sistem] Sesi buka pintu selesai. Pintu sudah tertutup.");
+        }
+    }
+}
+
+// =============================================================
+// FUNGSI: Handle Fase Monitoring (non-blocking)
+// Setelah relay OFF & kamera sudah dihentikan, jika pintu masih
+// terbuka → buzzer blink sebagai alarm pengingat.
+// Saat pintu tertutup → matikan buzzer & LED, selesai.
+// Pin 22 TIDAK DISENTUH di sini (sudah LOW sejak detik ke-20).
+// =============================================================
+void handleMonitoring() {
+    if (!monitoringPhase) return;
+
+    bool pintuTerbuka = (digitalRead(SENSOR_PIN) == HIGH);
+
+    if (pintuTerbuka) {
+        // Buzzer berkedip 500ms nyala/mati sebagai alarm pengingat
+        if (millis() - lastReminderBuzz >= ALARM_REMINDER_MS) {
+            lastReminderBuzz = millis();
+            reminderBuzzState = !reminderBuzzState;
+            digitalWrite(BUZZER_PIN, reminderBuzzState);
+        }
+        // LED Merah tetap menyala solid
+        digitalWrite(LED_RED_PIN, HIGH);
+    } else {
+        // Pintu TERTUTUP → akhiri fase monitoring
+        monitoringPhase = false;
+        reminderBuzzState = false;
+        digitalWrite(BUZZER_PIN,  LOW);
+        digitalWrite(LED_RED_PIN, LOW);
+        sesiAman = false;
+
+        Serial.println("[Monitor] Pintu TERTUTUP. Fase monitoring selesai.");
+        Serial.println("[Buzzer]  OFF.");
+        Serial.println("[Sesi]    Sesi aman berakhir.");
     }
 }
 
@@ -220,10 +277,13 @@ void handleRelayTimer() {
 //   LOW  → Saklar tertutup (magnet menempel) → Pintu TERTUTUP
 //   HIGH → Saklar terbuka  (magnet menjauh)  → Pintu TERBUKA
 //
-// Alarm aktif jika pintu terbuka TANPA relay diaktifkan sistem
-// (indikasi percobaan bobol).
+// Alarm aktif jika pintu terbuka TANPA sesi aman DAN TANPA
+// fase monitoring (indikasi percobaan bobol).
 // =============================================================
 void handleDoorSensor() {
+    // Skip jika sedang dalam fase monitoring (sudah ditangani handleMonitoring)
+    if (monitoringPhase) return;
+
     bool pintuTerbuka = (digitalRead(SENSOR_PIN) == HIGH);
 
     if (pintuTerbuka && !sesiAman) {
@@ -336,6 +396,9 @@ void loop() {
     // ── 4. Handle timer penutupan relay (non-blocking) ──
     handleRelayTimer();
 
-    // ── 5. Baca sensor pintu & handle alarm ──
+    // ── 5. Handle fase monitoring (buzzer pengingat setelah relay OFF) ──
+    handleMonitoring();
+
+    // ── 6. Baca sensor pintu & handle alarm anti-bobol ──
     handleDoorSensor();
 }

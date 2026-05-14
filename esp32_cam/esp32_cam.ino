@@ -11,10 +11,10 @@ const char* password = "laparlebah";
 // ==========================================
 // Konfigurasi Server (Backend)
 // ==========================================
-const char* server_host = "10.169.251.143";
+const char* server_host = "10.224.233.143";
 const int server_port = 5000;
 const char* upload_path = "/api/upload_frame";
-const char* compile_url = "http://10.169.251.143:5000/api/compile_video";
+const char* compile_url = "http://10.224.233.143:5000/api/compile_video";
 
 // ==========================================
 // Konfigurasi Pin
