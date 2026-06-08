@@ -2,13 +2,13 @@
 
 # 📦 KeeMaBox
 
-### Smart Delivery Box IoT — Kotak Paket Pintar Berbasis Validasi Resi
+### Smart Delivery Box IoT — Receipt Validation-Based Smart Package Box
 
-*Sistem kotak penerima paket otomatis dengan validasi nomor resi, otorisasi pemilik via Telegram, kontrol gembok jarak jauh (MQTT), dan perekaman video bukti penerimaan paket.*
+*An automated package receiver box system with receipt number validation, owner authorization via Telegram, remote padlock control (MQTT), and video recording as proof of package delivery.*
 
 <br>
 
-![Status](https://img.shields.io/badge/status-Phase%205%20(Aktif)-blueviolet?style=for-the-badge)
+![Status](https://img.shields.io/badge/status-Phase%205%20(Active)-blueviolet?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-IoT%20%7C%20ESP32-00979D?style=for-the-badge&logo=espressif&logoColor=white)
 ![Backend](https://img.shields.io/badge/backend-Flask%20%2B%20MongoDB-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/license-Private-lightgrey?style=for-the-badge)
@@ -17,299 +17,299 @@
 
 ---
 
-## 📑 Daftar Isi
+## 📑 Table of Contents
 
-- [Tentang Proyek](#-tentang-proyek)
-- [Fitur Utama](#-fitur-utama)
-- [Arsitektur Sistem](#-arsitektur-sistem)
-- [Alur Kerja Sistem](#-alur-kerja-sistem)
+- [About the Project](#-about-the-project)
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [System Workflow](#-system-workflow)
 - [Tech Stack](#-tech-stack)
-- [Struktur Direktori](#-struktur-direktori)
-- [Perangkat Keras & Wiring](#-perangkat-keras--wiring)
-- [Konfigurasi Backend (Flask)](#-konfigurasi-backend-flask)
-- [Firmware ESP32](#-firmware-esp32)
-- [Perbedaan Dua Varian Firmware Main](#-perbedaan-dua-varian-firmware-main)
-- [Instalasi & Menjalankan](#-instalasi--menjalankan)
-- [Catatan Keamanan](#-catatan-keamanan)
+- [Directory Structure](#-directory-structure)
+- [Hardware & Wiring](#-hardware--wiring)
+- [Backend Configuration (Flask)](#-backend-configuration-flask)
+- [ESP32 Firmware](#-esp32-firmware)
+- [Differences Between Two Main Firmware Variants](#-differences-between-two-main-firmware-variants)
+- [Installation & Running](#-installation--running)
+- [Security Notes](#-security-notes)
 - [Roadmap / Progress](#-roadmap--progress)
 
 ---
 
-## 🎯 Tentang Proyek
+## 🎯 About the Project
 
-**KeeMaBox** adalah sistem *Smart Delivery Box* yang dirancang untuk menerima paket secara aman tanpa kehadiran pemilik di lokasi. Berbeda dari model "deteksi otomatis", proyek ini menganut filosofi **"validasi berbasis izin pemilik"** untuk keamanan maksimal:
+**KeeMaBox** is a *Smart Delivery Box* system designed to securely receive packages without the owner's presence at the location. Unlike "auto-detection" models, this project adheres to an **"owner-permission-based validation"** philosophy for maximum security:
 
-> Pintu kotak **tidak akan pernah** terbuka otomatis. Kotak hanya terbuka setelah pemilik **secara sadar menekan tombol** dari dashboard, dipicu oleh notifikasi Telegram ketika kurir memasukkan nomor resi yang valid.
+> The box door **will never** open automatically. The box only opens after the owner **consciously presses a button** from the dashboard, triggered by a Telegram notification when the courier enters a valid receipt number.
 
-Setiap interaksi pintu terbuka direkam otomatis oleh kamera dan dikompilasi menjadi video MP4 sebagai bukti penerimaan paket.
-
----
-
-## ✨ Fitur Utama
-
-| Fitur | Deskripsi |
-|-------|-----------|
-| 🔐 **Validasi Resi** | Kurir memasukkan nomor resi; sistem memverifikasi terhadap database paket terdaftar. |
-| 📲 **Notifikasi Telegram** | Pemilik menerima notifikasi instan saat resi valid divalidasi oleh kurir. |
-| 🚪 **Kontrol Gembok Jarak Jauh** | Pemilik membuka solenoid lock dari dashboard via MQTT (`OPEN`). |
-| 🎥 **Perekaman Otomatis** | ESP32-CAM merekam frame saat pintu terbuka, lalu dikompilasi menjadi MP4. |
-| 🚨 **Alarm Anti-Bobol** | Buzzer + LED berbunyi jika pintu dibuka paksa tanpa izin sistem. |
-| ⏱️ **Toleransi Waktu** | Solenoid terbuka 20 detik, lalu otomatis mengunci kembali. |
-| 🖥️ **Dashboard Owner** | CRUD paket, monitoring status, pemutar video bukti — desain glassmorphism modern. |
-| 🛡️ **Hardening Keamanan** | URL rahasia, fake 404 trap, timing-safe auth, validasi input (mengacu OWASP Top 10). |
+Every open door interaction is automatically recorded by the camera and compiled into an MP4 video as proof of package reception.
 
 ---
 
-## 🏗️ Arsitektur Sistem
+## ✨ Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔐 **Receipt Validation** | Courier enters the receipt number; the system verifies it against the registered package database. |
+| 📲 **Telegram Notification** | Owner receives an instant notification when a valid receipt is validated by the courier. |
+| 🚪 **Remote Padlock Control** | Owner opens the solenoid lock from the dashboard via MQTT (`OPEN`). |
+| 🎥 **Auto Recording** | ESP32-CAM records frames while the door is open, then compiles them into an MP4. |
+| 🚨 **Anti-Theft Alarm** | Buzzer + LED sounds if the door is forced open without system authorization. |
+| ⏱️ **Time Tolerance** | Solenoid opens for 20 seconds, then automatically locks back. |
+| 🖥️ **Owner Dashboard** | Package CRUD, status monitoring, proof video player — modern glassmorphism design. |
+| 🛡️ **Security Hardening** | Secret URLs, fake 404 traps, timing-safe auth, input validation (OWASP Top 10 guidelines). |
+
+---
+
+## 🏗️ System Architecture
 
 ```
                                   ┌─────────────────────────┐
-                                  │   Kurir (HP / Browser)  │
-                                  │  scan QR → input resi   │
+                                  │  Courier (Phone/Browser)│
+                                  │  scan QR → input receipt│
                                   └───────────┬─────────────┘
                                               │ HTTP POST /api/validasi_resi
                                               ▼
-┌──────────────┐   notifikasi    ┌────────────────────────────────────┐
-│   Pemilik    │ ◀────Telegram───│         BACKEND FLASK (Docker)       │
-│ (HP/Telegram)│                 │  ┌──────────┐   ┌────────────────┐  │
-│              │   buka pintu    │  │ MongoDB  │   │ PyAV (compile) │  │
-│  Dashboard   │ ───────────────▶│  │ packages │   │  JPG → MP4     │  │
-└──────────────┘  /api/buka_pintu│  └──────────┘   └────────────────┘  │
-                                 └─────┬──────────────────────▲────────┘
+┌──────────────┐  notification   ┌────────────────────────────────────┐
+│    Owner     │ ◀────Telegram───│         FLASK BACKEND (Docker)     │
+│(Phone/Tg)    │                 │  ┌──────────┐   ┌────────────────┐ │
+│              │    open door    │  │ MongoDB  │   │ PyAV (compile) │ │
+│  Dashboard   │ ───────────────▶│  │ packages │   │  JPG → MP4     │ │
+└──────────────┘  /api/buka_pintu│  └──────────┘   └────────────────┘ │
+                                 └─────┬──────────────────────▲───────┘
                           MQTT publish │ "OPEN"               │ HTTP POST
                        (broker.avisha) │                      │ frame.jpg
                                        ▼                      │
                           ┌────────────────────┐    GPIO 22   │  ┌─────────────┐
-                          │  ESP32 Main Logic   │═════trigger══▶  │  ESP32-CAM  │
-                          │ Relay│Reed│Buzzer│LED│              │  │  (OV2640)   │
-                          └────────┬───────────┘                └─────────────┘
+                          │  ESP32 Main Logic  │═════trigger══▶  │  ESP32-CAM  │
+                          │ Relay│Reed│Buzzer│L│              │  │  (OV2640)   │
+                          └────────┬───────────┘              └──┴─────────────┘
                                    │ Relay (Active-Low)
                                    ▼
                           ┌────────────────────┐
-                          │ Solenoid Door Lock  │
+                          │ Solenoid Door Lock │
                           └────────────────────┘
 ```
 
-**Dua mikrokontroler bekerja terpisah:**
-- **ESP32 DevKit V1 (Main Logic)** — otak sistem: koneksi MQTT, kontrol relay/solenoid, baca sensor pintu, alarm, dan mengirim sinyal trigger ke kamera lewat GPIO 22.
-- **ESP32-CAM (OV2640)** — kamera: membaca sinyal trigger di GPIO 13, memotret frame setiap 200ms, dan mengirimnya ke backend via HTTP.
+**Two microcontrollers work separately:**
+- **ESP32 DevKit V1 (Main Logic)** — the brain of the system: MQTT connection, relay/solenoid control, read door sensor, alarm, and send trigger signals to the camera via GPIO 22.
+- **ESP32-CAM (OV2640)** — camera: reads trigger signals on GPIO 13, captures frames every 200ms, and sends them to the backend via HTTP.
 
 ---
 
-## 🔄 Alur Kerja Sistem
+## 🔄 System Workflow
 
-1. **Pendaftaran Paket** — Pemilik mendaftarkan `nama_barang` + `resi_number` di Dashboard (status: `pending`).
-2. **Kedatangan Kurir** — Kurir scan QR Code di kotak → diarahkan ke Portal Kurir → input nomor resi.
-3. **Validasi** — Server mengecek MongoDB. Jika resi cocok → status diubah ke `validated` + kirim **notifikasi Telegram** ke pemilik.
-4. **Otorisasi** — Pemilik membuka Dashboard, menekan tombol **"BUKA PINTU"** → server **publish MQTT** `OPEN` ke topic `barka/kontrol`.
-5. **Eksekusi** — ESP32 Main (subscribe topic) menerima `OPEN`:
-   - Buzzer beep 2x → Relay ON (solenoid terbuka) → GPIO 22 HIGH (trigger kamera) → timer **20 detik** mulai.
-6. **Perekaman** — ESP32-CAM mendeteksi trigger HIGH → memotret frame setiap **200ms** → kirim ke `/api/upload_frame`.
-7. **Penguncian** — Setelah 20 detik, Relay OFF (terkunci), GPIO 22 LOW. Jika pintu masih terbuka → buzzer alarm pengingat berkedip tiap 500ms sampai pintu ditutup.
-8. **Kompilasi** — Saat trigger LOW, ESP32-CAM memanggil `/api/compile_video` → server merajut semua frame JPG menjadi MP4 (5 FPS) via **PyAV**, lalu melampirkannya ke paket terkait di database.
+1. **Package Registration** — Owner registers `nama_barang` (item name) + `resi_number` (receipt number) on the Dashboard (status: `pending`).
+2. **Courier Arrival** — Courier scans the QR Code on the box → directed to Courier Portal → inputs receipt number.
+3. **Validation** — Server checks MongoDB. If receipt matches → status changes to `validated` + sends a **Telegram notification** to the owner.
+4. **Authorization** — Owner opens Dashboard, presses the **"OPEN DOOR"** button → server **publishes MQTT** `OPEN` to topic `barka/kontrol`.
+5. **Execution** — ESP32 Main (subscribed to topic) receives `OPEN`:
+   - Buzzer beeps 2x → Relay ON (solenoid opens) → GPIO 22 HIGH (camera trigger) → **20-second** timer starts.
+6. **Recording** — ESP32-CAM detects HIGH trigger → captures frames every **200ms** → sends to `/api/upload_frame`.
+7. **Locking** — After 20 seconds, Relay OFF (locked), GPIO 22 LOW. If the door is still open → reminder alarm buzzer blinks every 500ms until the door is closed.
+8. **Compilation** — When trigger is LOW, ESP32-CAM calls `/api/compile_video` → server stitches all JPG frames into an MP4 (5 FPS) via **PyAV**, then attaches it to the related package in the database.
 
 ---
 
 ## 🧰 Tech Stack
 
 ### Hardware
-- **ESP32 DevKit V1** — main controller (upgrade dari ESP8266 di jurnal referensi)
-- **ESP32-CAM (AI-Thinker / OV2640)** — modul kamera
-- **Magnetic Reed Switch (MC-38)** — deteksi status pintu
-- **Solenoid Door Lock 12V + Relay Module** — aktuator gembok
-- **Buzzer + LED (Merah & Biru)** — indikator & alarm
-- **Adaptor 12V + Step-down LM2596** — catu daya (12V → 5V)
+- **ESP32 DevKit V1** — main controller (upgrade from ESP8266 in reference journal)
+- **ESP32-CAM (AI-Thinker / OV2640)** — camera module
+- **Magnetic Reed Switch (MC-38)** — door status detection
+- **Solenoid Door Lock 12V + Relay Module** — padlock actuator
+- **Buzzer + LED (Red & Blue)** — indicator & alarm
+- **12V Adapter + LM2596 Step-down** — power supply (12V → 5V)
 
 ### Software & Backend
-| Komponen | Teknologi |
-|----------|-----------|
+| Component | Technology |
+|-----------|------------|
 | Web Framework | **Flask** (Python 3.9) |
 | Database | **MongoDB** (NoSQL) |
-| Komunikasi Kontrol | **MQTT** (`paho-mqtt` / `PubSubClient`) |
-| Upload Gambar | **HTTP** (Multipart POST) |
+| Control Comm | **MQTT** (`paho-mqtt` / `PubSubClient`) |
+| Image Upload | **HTTP** (Multipart POST) |
 | Video Processing | **PyAV** (+ Pillow, NumPy) |
-| Notifikasi | **Telegram Bot API** (via `requests`) |
+| Notification | **Telegram Bot API** (via `requests`) |
 | Frontend | **Jinja2 + Tailwind CSS (CDN)** + Vanilla JS |
 | Deployment | **Docker + Docker Compose** |
-| Tunneling | Cloudflare Tunnel / Ngrok (opsional) |
+| Tunneling | Cloudflare Tunnel / Ngrok (optional) |
 
 ---
 
-## 📂 Struktur Direktori
+## 📂 Directory Structure
 
 ```text
 KeeMaBox/
-├── backend/                          # Backend Flask (containerized)
-│   ├── app.py                        # Server utama: routes, MQTT, Telegram, video
-│   ├── requirements.txt              # Dependency Python
-│   ├── Dockerfile                    # Image dengan dependensi PyAV
-│   ├── static/uploads/               # Storage video .mp4
-│   │   └── temp_frames/              # Storage sementara frame .jpg
+├── backend/                          # Flask Backend (containerized)
+│   ├── app.py                        # Main server: routes, MQTT, Tg, video
+│   ├── requirements.txt              # Python dependencies
+│   ├── Dockerfile                    # Image with PyAV dependencies
+│   ├── static/uploads/               # .mp4 video storage
+│   │   └── temp_frames/              # Temporary .jpg frame storage
 │   └── templates/                    # Jinja2 templates
-│       ├── kurir.html                # Portal publik (input resi)
-│       ├── login.html                # Halaman login admin
-│       └── index.html                # Dashboard owner
+│       ├── kurir.html                # Public portal (receipt input)
+│       ├── login.html                # Admin login page
+│       └── index.html                # Owner dashboard
 │
 ├── firmware/
-│   └── esp32_main_logic/             # Firmware ESP32 utama (relay, sensor, alarm)
+│   └── esp32_main_logic/             # Main ESP32 firmware (relay, sensor, alarm)
 │       └── esp32_main_logic.ino
 │
-├── esp32_cam/                        # Firmware ESP32-CAM (capture & upload)
+├── esp32_cam/                        # ESP32-CAM firmware (capture & upload)
 │   └── esp32_cam.ino
 │
-├── esp32_main_logic_copy/            # Salinan cadangan firmware utama
+├── esp32_main_logic_copy/            # Backup of main firmware
 │
-├── reference/                        # Bahan referensi (jurnal, wiring, catatan)
+├── reference/                        # Reference materials (journals, wiring, notes)
 │
-├── docker-compose.yml                # Orkestrasi service web + mongo
-├── .env                              # Variabel rahasia (TIDAK di-commit)
-├── PROJECT_PLAN.md                   # Rencana proyek lengkap
-└── README.md                         # Dokumen ini
+├── docker-compose.yml                # Web + mongo service orchestration
+├── .env                              # Secret variables (NOT committed)
+├── PROJECT_PLAN.md                   # Full project plan
+└── README.md                         # This document
 ```
 
 ---
 
-## 🔌 Perangkat Keras & Wiring
+## 🔌 Hardware & Wiring
 
 ### Pin Mapping — ESP32 DevKit V1 (Main Logic)
 
-| Komponen | Pin GPIO | Mode | Keterangan |
-|----------|:--------:|------|------------|
-| Relay (Solenoid) | **19** | OUTPUT | **Active-Low**: `LOW` = ON (terbuka), `HIGH` = OFF (terkunci) |
-| Magnetic Reed Switch | **4** | INPUT_PULLUP | `HIGH` = pintu terbuka, `LOW` = pintu tertutup |
-| Buzzer | **18** | OUTPUT | Konfirmasi & alarm |
-| LED Merah | **5** | OUTPUT | Indikator pintu terbuka / alarm (lewat resistor 220Ω) |
-| LED Biru | **21** | OUTPUT | Status koneksi jaringan (lewat resistor 220Ω) |
-| Camera Trigger | **22** | OUTPUT | Sinyal HIGH → ESP32-CAM mulai merekam |
+| Component | GPIO Pin | Mode | Description |
+|-----------|:--------:|------|-------------|
+| Relay (Solenoid) | **19** | OUTPUT | **Active-Low**: `LOW` = ON (open), `HIGH` = OFF (locked) |
+| Magnetic Reed Switch | **4** | INPUT_PULLUP | `HIGH` = door open, `LOW` = door closed |
+| Buzzer | **18** | OUTPUT | Confirmation & alarm |
+| Red LED | **5** | OUTPUT | Door open / alarm indicator (via 220Ω resistor) |
+| Blue LED | **21** | OUTPUT | Network connection status (via 220Ω resistor) |
+| Camera Trigger | **22** | OUTPUT | HIGH signal → ESP32-CAM starts recording |
 
 ### Pin Trigger — ESP32-CAM
 
-| Komponen | Pin GPIO | Mode | Keterangan |
-|----------|:--------:|------|------------|
-| Trigger Input | **13** | INPUT_PULLDOWN | Menerima sinyal dari GPIO 22 ESP32 Main |
+| Component | GPIO Pin | Mode | Description |
+|-----------|:--------:|------|-------------|
+| Trigger Input | **13** | INPUT_PULLDOWN | Receives signal from GPIO 22 of ESP32 Main |
 
-> ⚠️ **Common Ground wajib**: hubungkan semua GND (ESP32, ESP32-CAM, Relay, Step-down) ke titik yang sama agar logika sinyal trigger antar-board terbaca benar.
+> ⚠️ **Common Ground is mandatory**: connect all GNDs (ESP32, ESP32-CAM, Relay, Step-down) to the same point so the trigger signal logic between boards is read correctly.
 
-### Jalur Power
-- Adaptor **12V** → Jack DC → `IN+/IN-` Step-down LM2596 **dan** ke `COM` relay + GND solenoid.
-- Step-down output **5V** → `VIN` ESP32, `5V` ESP32-CAM, `VCC` Relay (pastikan dikalibrasi tepat 5.0V).
-- Solenoid (+) → pin **NO** relay; relay `IN` → GPIO 19 ESP32.
+### Power Routing
+- **12V** Adapter → DC Jack → `IN+/IN-` LM2596 Step-down **and** to `COM` relay + GND solenoid.
+- Step-down output **5V** → `VIN` ESP32, `5V` ESP32-CAM, `VCC` Relay (ensure calibrated to exactly 5.0V).
+- Solenoid (+) → **NO** relay pin; relay `IN` → GPIO 19 ESP32.
 
 ---
 
-## ⚙️ Konfigurasi Backend (Flask)
+## ⚙️ Backend Configuration (Flask)
 
-Semua kredensial sensitif diambil dari **environment variables** (file `.env`), tidak di-hardcode.
+All sensitive credentials are fetched from **environment variables** (`.env` file), not hardcoded.
 
-| Variabel | Fungsi | Default / Catatan |
-|----------|--------|-------------------|
-| `SECRET_KEY` | Kunci sesi Flask | **Wajib** diganti string random panjang |
-| `MONGO_URI` | Koneksi MongoDB | `mongodb://db:27017/smart_box` (Docker) |
-| `ADMIN_USERNAME` | Username login admin | — |
-| `ADMIN_PASSWORD` | Password login admin | **Wajib** di-set via env |
-| `MQTT_PASSWORD` | Password broker MQTT | broker: `broker.avisha.id:1883`, user `barka` |
-| `TELEGRAM_BOT_TOKEN` | Token bot Telegram | dari @BotFather |
-| `TELEGRAM_CHAT_ID` | Chat ID tujuan notifikasi | — |
-| `TZ` | Zona waktu | `Asia/Jakarta` (WIB) |
+| Variable | Function | Default / Notes |
+|----------|----------|-----------------|
+| `SECRET_KEY` | Flask session key | **Must** be changed to a long random string |
+| `MONGO_URI` | MongoDB connection | `mongodb://db:27017/smart_box` (Docker) |
+| `ADMIN_USERNAME` | Admin login username | — |
+| `ADMIN_PASSWORD` | Admin login password | **Must** be set via env |
+| `MQTT_PASSWORD` | MQTT broker password | broker: `broker.avisha.id:1883`, user `barka` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | from @BotFather |
+| `TELEGRAM_CHAT_ID` | Destination chat ID | — |
+| `TZ` | Timezone | `Asia/Jakarta` |
 
-**Konfigurasi MQTT tetap:**
+**Fixed MQTT Configuration:**
 - Broker: `broker.avisha.id` | Port: `1883` | User: `barka`
-- Topic kontrol: `barka/kontrol` | Payload buka: `OPEN`
+- Control Topic: `barka/kontrol` | Open Payload: `OPEN`
 
-### Skema Dokumen `packages` (MongoDB)
+### `packages` Document Schema (MongoDB)
 ```jsonc
 {
   "_id": ObjectId,
   "nama_barang": "string",
-  "resi_number": "string",          // unik
+  "resi_number": "string",          // unique
   "status": "pending | validated",
   "created_at": ISODate,
-  "validated_at": ISODate,          // saat kurir validasi
-  "video_url": "/static/uploads/video_xxx.mp4"  // setelah kompilasi
+  "validated_at": ISODate,          // when courier validates
+  "video_url": "/static/uploads/video_xxx.mp4"  // after compilation
 }
 ```
 
 ---
 
-## 💾 Firmware ESP32
+## 💾 ESP32 Firmware
 
-### `esp32_main_logic.ino` — Otak Sistem
-Ditulis gaya **prosedural Arduino** (non-blocking dengan `millis()`), library **PubSubClient by Nick O'Leary**. State machine utama:
+### `esp32_main_logic.ino` — The Brain
+Written in **procedural Arduino** style (non-blocking with `millis()`), using **PubSubClient by Nick O'Leary**. Main state machine:
 
-- **`mqttCallback()`** — saat menerima `OPEN`: aktifkan `sesiAman`, beep 2x, trigger kamera HIGH, relay ON, mulai timer 20 detik.
-- **`handleRelayTimer()`** — setelah 20 detik: relay OFF, kamera trigger LOW, masuk fase monitoring jika pintu masih terbuka.
-- **`handleMonitoring()`** — buzzer berkedip 500ms selama pintu masih terbuka pasca-timer.
-- **`handleDoorSensor()`** — **alarm anti-bobol**: jika pintu terbuka tanpa `sesiAman` aktif → buzzer + LED merah berkedip cepat (150ms). Variabel `sesiAman` mencegah *race condition* antara pembukaan sah dan deteksi bobol.
+- **`mqttCallback()`** — on receiving `OPEN`: activates `sesiAman` (safe session), beeps 2x, sets camera trigger HIGH, turns relay ON, starts 20s timer.
+- **`handleRelayTimer()`** — after 20 seconds: turns relay OFF, sets camera trigger LOW, enters monitoring phase if door is still open.
+- **`handleMonitoring()`** — buzzer blinks 500ms as long as the door remains open post-timer.
+- **`handleDoorSensor()`** — **anti-theft alarm**: if door opens without active `sesiAman` → buzzer + red LED blinks rapidly (150ms). The `sesiAman` variable prevents race conditions between authorized opening and theft detection.
 
-### `esp32_cam.ino` — Kamera
-Library: `esp_camera.h`, `WiFi.h`, `HTTPClient.h`. Resolusi VGA, JPEG quality 12.
+### `esp32_cam.ino` — The Camera
+Libraries: `esp_camera.h`, `WiFi.h`, `HTTPClient.h`. VGA resolution, JPEG quality 12.
 
-- **Standby** → baca GPIO 13.
-- **HIGH** → potret + HTTP multipart POST ke `/api/upload_frame` setiap 200ms (dikirim per-chunk 1024 byte agar stabil).
-- **LOW** (setelah HIGH) → panggil `/api/compile_video`, kembali standby.
+- **Standby** → reads GPIO 13.
+- **HIGH** → captures + HTTP multipart POST to `/api/upload_frame` every 200ms (sent in 1024-byte chunks for stability).
+- **LOW** (after HIGH) → calls `/api/compile_video`, returns to standby.
 
-> ⚙️ **Sebelum upload:** sesuaikan `server_host` / `compile_url` di `esp32_cam.ino` dengan IP backend, dan kredensial WiFi/MQTT di kedua firmware.
+> ⚙️ **Before uploading:** adjust `server_host` / `compile_url` in `esp32_cam.ino` with your backend IP, and WiFi/MQTT credentials in both firmwares.
 
 ---
 
-## � Perbedaan Dua Varian Firmware Main
+## 🔄 Differences Between Two Main Firmware Variants
 
-Terdapat **dua versi** firmware ESP32 Main di repo ini. Keduanya **identik 100%** kecuali pada blok eksekusi perintah `OPEN` di dalam fungsi `mqttCallback()`. Perbedaannya terletak pada **urutan penyalaan komponen** saat pintu dibuka.
+There are **two versions** of the ESP32 Main firmware in this repo. Both are **100% identical** except for the `OPEN` command execution block within the `mqttCallback()` function. The difference lies in the **turn-on sequence of components** when the door is opened.
 
-| Aspek | `firmware/esp32_main_logic/` (Stabil) | `esp32_main_logic_copy/` (Eksperimental) |
-|-------|---------------------------------------|-------------------------------------------|
-| **Strategi** | Urutan langsung (immediate) | **Software Sequencing / Staggered Start** |
-| **Urutan saat `OPEN`** | Beep → Trigger kamera → LED → Relay | **Trigger kamera → jeda 1.5s → Beep → LED → Relay** |
-| **Jeda sebelum relay** | Tidak ada (langsung) | `delay(1500)` setelah trigger kamera |
-| **Tujuan** | Respons cepat | Mencegah *voltage sag* / crash ESP32-CAM |
+| Aspect | `firmware/esp32_main_logic/` (Stable) | `esp32_main_logic_copy/` (Experimental) |
+|--------|---------------------------------------|-----------------------------------------|
+| **Strategy** | Immediate sequence | **Software Sequencing / Staggered Start** |
+| **Order on `OPEN`** | Beep → Cam Trigger → LED → Relay | **Cam Trigger → wait 1.5s → Beep → LED → Relay** |
+| **Delay before relay**| None (immediate) | `delay(1500)` after camera trigger |
+| **Purpose** | Fast response | Prevents *voltage sag* / ESP32-CAM crash |
 
-### Inti Perbedaan Logika
+### Core Logic Difference
 
-**Versi Stabil** — komponen dinyalakan berurutan tanpa jeda. Relay (beban induktif berat) bisa ditarik hampir bersamaan dengan saat ESP32-CAM sedang inisialisasi:
+**Stable Version** — components turn on sequentially without delay. The relay (heavy inductive load) is pulled almost simultaneously with the ESP32-CAM initializing:
 
 ```cpp
-beepBuzzer(2, 150, 100);              // 1. Beep dulu
-digitalWrite(CAM_TRIGGER_PIN, HIGH);  // 2. Trigger kamera
+beepBuzzer(2, 150, 100);              // 1. Beep first
+digitalWrite(CAM_TRIGGER_PIN, HIGH);  // 2. Camera trigger
 digitalWrite(LED_RED_PIN, HIGH);      // 3. LED
-digitalWrite(RELAY_PIN, LOW);         // 4. Relay ON (langsung)
+digitalWrite(RELAY_PIN, LOW);         // 4. Relay ON (immediate)
 ```
 
-**Versi Copy (Eksperimental)** — menerapkan *staggered start*. Kamera diaktifkan **lebih dulu** saat tegangan listrik masih bersih, diberi jeda 1.5 detik agar stabil, **baru** solenoid (beban berat) ditarik terakhir:
+**Copy Version (Experimental)** — implements a *staggered start*. The camera is activated **first** while voltage is clean, given a 1.5s delay to stabilize, **then** the solenoid (heavy load) is pulled last:
 
 ```cpp
-digitalWrite(CAM_TRIGGER_PIN, HIGH);  // 1. Kamera DULUAN (beban ringan)
-delay(1500);                          // 2. Tunggu kamera stabil
+digitalWrite(CAM_TRIGGER_PIN, HIGH);  // 1. Camera FIRST (light load)
+delay(1500);                          // 2. Wait for camera to stabilize
 beepBuzzer(2, 150, 100);              // 3. Beep
 digitalWrite(LED_RED_PIN, HIGH);      // 4. LED
-digitalWrite(RELAY_PIN, LOW);         // 5. Relay ON (beban berat, TERAKHIR)
+digitalWrite(RELAY_PIN, LOW);         // 5. Relay ON (heavy load, LAST)
 ```
 
-### Mengapa Versi Copy Ada?
-Solenoid 12V menarik arus besar (lonjakan induktif) saat aktif. Jika ESP32-CAM sedang booting/inisialisasi kamera pada saat bersamaan, *drop tegangan* (voltage sag) dapat membuat ESP32-CAM **reset atau crash** sehingga gagal merekam. Versi copy mengatasi ini dengan memastikan kamera sudah berjalan stabil **sebelum** solenoid ditarik.
+### Why does the Copy Version Exist?
+A 12V solenoid draws a large current (inductive spike) when activated. If the ESP32-CAM is booting/initializing the camera at the same time, a *voltage sag* can cause the ESP32-CAM to **reset or crash**, failing to record. The copy version fixes this by ensuring the camera runs stably **before** pulling the solenoid.
 
-> 📝 **Catatan minor:** versi copy juga memperbaiki format `Serial.printf` timer dari `%d` menjadi `%lu` (sesuai tipe `unsigned long`). Sisanya — WiFi, MQTT, `reconnect()`, timer relay, monitoring, dan alarm anti-bobol — **tidak berubah** di kedua varian.
+> 📝 **Minor note:** the copy version also fixes the `Serial.printf` timer format from `%d` to `%lu` (matching `unsigned long` type). The rest — WiFi, MQTT, `reconnect()`, relay timer, monitoring, and anti-theft alarm — **remains unchanged** in both variants.
 
 ---
 
-## �🚀 Instalasi & Menjalankan
+## 🚀 Installation & Running
 
-### 1. Backend (Docker — direkomendasikan)
+### 1. Backend (Docker — Recommended)
 
 ```bash
-# Dari root proyek, buat file .env terlebih dahulu (lihat tabel konfigurasi)
+# From project root, create .env file first (see configuration table)
 docker-compose up --build
 ```
 
-Service yang dijalankan:
-- **`keemabox_mongo`** — MongoDB di port `27017`
-- **`keemabox_flask`** — Flask di port `5000`
+Running services:
+- **`keemabox_mongo`** — MongoDB on port `27017`
+- **`keemabox_flask`** — Flask on port `5000`
 
-Akses dashboard: `http://localhost:5000/dca-dooa-001`
+Dashboard access: `http://localhost:5000/dca-dooa-001`
 
-### 2. Backend (manual / tanpa Docker)
+### 2. Backend (Manual / without Docker)
 
 ```bash
-# PyAV butuh dependensi sistem FFmpeg (libav*)
+# PyAV requires system FFmpeg dependencies (libav*)
 pip install -r backend/requirements.txt
 export MONGO_URI="mongodb://localhost:27017/smart_box"
 export SECRET_KEY="..." ADMIN_PASSWORD="..." MQTT_PASSWORD="..."
@@ -317,43 +317,43 @@ python backend/app.py
 ```
 
 ### 3. Firmware
-1. Buka `firmware/esp32_main_logic/esp32_main_logic.ino` di **Arduino IDE**.
-2. Install library **PubSubClient** (by Nick O'Leary) via Library Manager.
-3. Sesuaikan SSID/password WiFi & kredensial MQTT, lalu upload ke ESP32 DevKit V1.
-4. Buka `esp32_cam/esp32_cam.ino`, sesuaikan `server_host`/IP backend, upload ke ESP32-CAM (board: *AI Thinker ESP32-CAM*).
+1. Open `firmware/esp32_main_logic/esp32_main_logic.ino` in **Arduino IDE**.
+2. Install **PubSubClient** library (by Nick O'Leary) via Library Manager.
+3. Adjust WiFi SSID/password & MQTT credentials, then upload to ESP32 DevKit V1.
+4. Open `esp32_cam/esp32_cam.ino`, adjust `server_host`/Backend IP, upload to ESP32-CAM (board: *AI Thinker ESP32-CAM*).
 
-> 📡 **Tunneling (opsional):** untuk akses kurir via QR dari internet, ekspos port 5000 dengan Cloudflare Tunnel atau Ngrok.
+> 📡 **Tunneling (optional):** for courier access via QR from the internet, expose port 5000 with Cloudflare Tunnel or Ngrok.
 
 ---
 
-## 🔒 Catatan Keamanan
+## 🔒 Security Notes
 
-Proyek ini menerapkan beberapa praktik hardening mengacu **OWASP Top 10**:
+This project implements several hardening practices following the **OWASP Top 10**:
 
-- **A01 (Access Control)** — Cookie `SameSite=Lax`; dashboard & API admin memakai *fake 404 trap* (mengembalikan 404, bukan redirect, jika belum login) agar keberadaan halaman tidak terekspos.
-- **A02 (Crypto Failures)** — `SECRET_KEY` & semua password wajib dari environment variable, bukan hardcode.
-- **A03 (Injection)** — Validasi input di endpoint; upload frame hanya menerima ekstensi `.jpg/.jpeg`.
-- **A07 (Auth Failures)** — `hmac.compare_digest()` untuk cegah *timing attack*; `session.clear()` saat login untuk cegah *session fixation*; cookie `HttpOnly`.
-- **Security through Obscurity** — URL login/dashboard tidak obvious (`dca-dooa-xxx`).
+- **A01 (Access Control)** — `SameSite=Lax` cookies; admin dashboard & API use *fake 404 traps* (returning 404, not redirecting, if not logged in) so page existence is not exposed.
+- **A02 (Crypto Failures)** — `SECRET_KEY` & all passwords must come from environment variables, not hardcoded.
+- **A03 (Injection)** — Input validation on endpoints; frame upload only accepts `.jpg/.jpeg` extensions.
+- **A07 (Auth Failures)** — `hmac.compare_digest()` to prevent *timing attacks*; `session.clear()` on login to prevent *session fixation*; `HttpOnly` cookies.
+- **Security through Obscurity** — Non-obvious login/dashboard URLs (`dca-dooa-xxx`).
 
-> 🛡️ **Rekomendasi produksi:** tambahkan rate-limiting pada `/api/validasi_resi` & login, batasi endpoint hardware (`upload_frame`/`compile_video`) dengan API key/IP allowlist, dan gunakan HTTPS (via tunnel/reverse proxy). MQTT sebaiknya naik ke TLS (port 8883).
+> 🛡️ **Production recommendation:** add rate-limiting to `/api/validasi_resi` & login, restrict hardware endpoints (`upload_frame`/`compile_video`) with API keys/IP allowlists, and use HTTPS (via tunnel/reverse proxy). MQTT should upgrade to TLS (port 8883).
 
 ---
 
 ## 🗺️ Roadmap / Progress
 
-| Fase | Deskripsi | Status |
-|------|-----------|:------:|
-| **Phase 1** | Infrastruktur & Database (Docker, MongoDB) | ✅ Selesai |
-| **Phase 2** | Backend Flask, MQTT, Notifikasi Telegram | ✅ Selesai |
-| **Phase 3** | Frontend Dashboard & Portal Kurir (Tailwind) | ✅ Selesai |
-| **Phase 4** | Firmware ESP32 Main (relay, sensor, alarm) | ✅ Selesai |
-| **Phase 5** | ESP32-CAM & Video Processing (PyAV) | 🔄 Aktif |
+| Phase | Description | Status |
+|-------|-------------|:------:|
+| **Phase 1** | Infrastructure & Database (Docker, MongoDB) | ✅ Done |
+| **Phase 2** | Flask Backend, MQTT, Telegram Notifications | ✅ Done |
+| **Phase 3** | Frontend Dashboard & Courier Portal (Tailwind) | ✅ Done |
+| **Phase 4** | ESP32 Main Firmware (relay, sensor, alarm) | ✅ Done |
+| **Phase 5** | ESP32-CAM & Video Processing (PyAV) | 🔄 Active |
 
-**Sudah berjalan:**
-- Logika `sesiAman` (anti race-condition alarm) & timer relay non-blocking.
-- Endpoint `/api/upload_frame` & `/api/compile_video` (PyAV @ 5 FPS) + auto-attach video ke paket.
-- Firmware ESP32-CAM capture & upload via HTTP multipart.
+**Currently Running:**
+- `sesiAman` logic (anti-race-condition alarm) & non-blocking relay timer.
+- `/api/upload_frame` & `/api/compile_video` endpoints (PyAV @ 5 FPS) + auto-attach video to package.
+- ESP32-CAM firmware capture & upload via HTTP multipart.
 
 ---
 
@@ -361,6 +361,6 @@ Proyek ini menerapkan beberapa praktik hardening mengacu **OWASP Top 10**:
 
 **KeeMaBox** &copy; 2026 — Smart Delivery Box IoT
 
-*Dibangun dengan Flask, MongoDB, MQTT & ESP32*
+*Built with Flask, MongoDB, MQTT & ESP32*
 
 </div>
